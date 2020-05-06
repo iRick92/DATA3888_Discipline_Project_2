@@ -1,0 +1,299 @@
+---
+title: "Shiny_Code"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(GEOquery)  ## go to https://github.com/seandavi/GEOquery for installation details
+library(ggplot2)
+library(tidyverse)
+library(reshape2)
+
+```
+
+```{r}
+
+clinical_outcome_GSE107509 <- getGEO("GSE107509")
+
+clinical_outcome_GSE107509_results <- clinical_outcome_GSE107509$GSE107509_series_matrix.txt.gz$characteristics_ch1
+
+rejection_status_GSE107509 <- unlist(lapply( strsplit(as.character(clinical_outcome_GSE107509_results), ": " ) , `[[` , 2)  )
+
+rejection_status_GSE107509 = toupper(rejection_status_GSE107509)
+
+rejection_table = table(rejection_status_GSE107509)  # WILL NEED TO COMBINE THESE: "subclinical acute rejection" "subclinical Acute Rejection" since they are the same
+
+print(names(rejection_table)[[1]])
+print(as.vector(rejection_table[1]))
+
+
+# need to add on the outcome as cbind() after using transpose t() 
+
+```
+
+```{r}
+
+#write.csv(data.frame(rejection_status_GSE107509), "data/rejection_status_GSE107509.txt", row.names=FALSE)
+
+rejection_status_GSE107509 = read.csv("data/rejection_status_GSE107509.txt")
+
+```
+
+```{r}
+
+gse = readr::read_csv("data/GSE107509_RAW/GSE107509_Matrix.txt")
+
+# ------ read_csv returns a tibble but can be converted to a t=data frame as.data.frame(gse)
+
+# Get gene names
+gene_names = gse$Gene
+
+# Remove first column - The X column we saved
+gse = gse[,-1]
+
+# Set row names as gene names
+rownames(gse) = gene_names
+
+# Transpose the data frame
+gse_t = as.data.frame(t(gse))
+colnames(gse_t) = gene_names
+
+
+```
+
+```{r}
+
+# check transformation
+summary(gse[,1])
+
+p <- ggplot(melt(gse), aes(x=variable, y=value)) +  
+  geom_boxplot(outlier.colour="black", outlier.shape=16,
+             outlier.size=0.5, notch=FALSE) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs (x = "patient", y = "expression value") + theme_minimal()
+p
+```
+
+
+```{r}
+
+cor_matrix<-cor(gse_t[1:100])
+diag(cor_matrix)<-0
+library(corrplot)
+corrplot(cor_matrix, method="square")
+
+```
+
+
+```{r}
+
+prComp<-prcomp(gse_t[1:100],scale. = TRUE)
+std_dev <- prComp$sdev
+pr_var <- std_dev^2
+prop_varex <- pr_var/sum(pr_var)
+sum(prop_varex[1:50])
+
+```
+
+```{r}
+gse_pca <- prcomp(gse_t)
+df_toplot <- data.frame(rejection_status_GSE107509, 
+                        pc1 = gse_pca$x[,1], pc2 = gse_pca$x[,2]  )
+
+
+g <- ggplot(df_toplot, aes(x = pc1, y = pc2, color = rejection_status_GSE107509)) + 
+  geom_point() + 
+  theme_minimal() 
+g
+
+```
+
+PCA
+```{r}
+
+#compute variance
+gse_pca_var <- gse_pca$sdev^2
+pca_cumulative_sum_top_30 = cumsum(gse_pca_var[1:30]/sum(gse_pca_var))
+
+# Convert to Data Frame
+pca_top_30_df = data.frame(Principal_Component = seq(1,30), Variability = pca_cumulative_sum_top_30)
+
+# Reducing from 50000 genes to 30 principal components results in around 80% variability.
+
+
+ggplot(data = pca_top_30_df, aes(x = Principal_Component, y = Variability)) + geom_line() + geom_point() + theme_minimal()
+
+```
+
+MODEL
+```{r}
+
+X = as.matrix(gse_pca$x[,1:30])
+y = rejection_status_GSE107509
+
+cvK = 5  # number of CV folds
+cv_50acc5_knn = cv_50acc5_svm = cv_50acc5_rf = c()
+cv_acc_knn = cv_acc_svm = cv_acc_rf = c()
+
+n_sim = 25 ## number of repeats
+for (i in 1:n_sim) {
+
+  cvSets = cvTools::cvFolds(nrow(X), cvK)  # permute all the data, into 5 folds
+  cv_acc_knn = cv_acc_svm = cv_acc_rf = c()
+  
+  for (j in 1:cvK) {
+    test_id = cvSets$subsets[cvSets$which == j]
+    X_test = X[test_id, ]
+    X_train = X[-test_id, ]
+    y_test = y[test_id]
+    y_train = y[-test_id]
+    
+    ## KNN
+    fit5 = class::knn(train = X_train, test = X_test, cl = y_train, k = 5)
+    cv_acc_knn[j] = table(fit5, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    
+    ## SVM
+    svm_res <- e1071::svm(x = X_train, y = as.factor(y_train))
+    fit <- predict(svm_res, X_test)
+    cv_acc_svm[j] = table(fit, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+
+    ## RandomForest
+    rf_res <- randomForest::randomForest(x = X_train, y = as.factor(y_train))
+    fit <- predict(rf_res, X_test)
+    cv_acc_rf[j] = table(fit, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+  }
+  cv_50acc5_knn <- append(cv_50acc5_knn, mean(cv_acc_knn))
+  cv_50acc5_svm <- append(cv_50acc5_svm, mean(cv_acc_svm))
+  cv_50acc5_rf <- append(cv_50acc5_rf, mean(cv_acc_rf))
+} ## end for
+
+boxplot(list(SVM = cv_50acc5_svm, KNN = cv_50acc5_knn , RF= cv_50acc5_rf ))
+
+```
+Apply to test
+```{r}
+
+test_index = 1
+
+test_outcome = rejection_status_GSE107509[test_index]
+test_data = gse_t[test_index,]
+
+print(test_outcome)
+
+test.data<-predict(gse_pca, newdata = test_data)
+test.data <- as.data.frame(test.data)
+test.data <- test.data[,1:30]
+pred_test <- predict(rf_res, test.data)
+pred_test
+```
+
+
+```{r}
+# Mean gene expression data
+mean_df = as.data.frame(apply(gse, 1, mean, na.rm=TRUE))
+
+var_df = as.data.frame(apply(gse, 1, var, na.rm=TRUE))
+
+# can use min and max 
+
+write.csv(mean_df, "GSE107509_mean.csv")
+write.csv(var_df, "GSE107509_var.csv")
+
+```
+
+
+```{r}
+
+# Get top 5 genes by variance
+var_df %>% arrange(desc(Var)) %>% head %>% select(Gene)
+
+```
+
+
+
+```{r}
+
+
+# Single sample data example
+this_df = as.data.frame(gse[,1])
+
+combined_df = cbind(mean_df, this_df)
+
+colnames(combined_df) = c("mean", "sample")
+
+combined_df = combined_df %>% mutate(comparison = ifelse(mean > sample, "lower", "greater"))
+
+table(combined_df$comparison)
+
+
+#for gse 1 - Excellence
+#greater   lower 
+#    871   53844 
+
+
+#for gse 659 - Rejection
+#greater   lower 
+#  54397     318 
+  
+```
+
+
+```{r}
+
+# Convert into 6*100 samples and 1*59 samples of 50K+ genes
+
+subset = as.data.frame(gse[,601:659])
+rownames(subset) = gene_names
+
+write.csv(subset, 'data/GSE107509_Split/GSE107509_Part7.txt', row.names = FALSE)
+
+
+```
+
+```{r}
+
+# Concatenating the files
+
+# Directory for GSE107509
+directory = "data/GSE107509_Split/"
+
+# Read in the files
+fileNames <- list.files(directory)
+
+# Read in all files to make a table
+GSE107509 = as.data.frame(readr::read_csv("data/GSE107509_Split/GSE107509_GeneNames.txt"))
+
+# Skip First (GeneName) data
+for(i in 2:length(fileNames)){
+print(fileNames[i])
+  temptable <- readr::read_csv(file.path(directory, fileNames[i]))
+  # Concatenate the second column (This particular person)
+  GSE107509 <- cbind(GSE107509, temptable)
+}
+
+# Get gene names
+gene_names = GSE107509$Gene
+
+# Remove first column - The X column we saved
+GSE107509 = GSE107509[,-1]
+
+# Set gene names as rows
+rownames(GSE107509) = gene_names
+
+
+
+```
+
+
+
+https://stats.stackexchange.com/questions/258938/pca-before-random-forest-regression-provide-better-predictive-scores-for-my-data/258942
+
+- PCA for better prediciton in Random Forests
+
+
+I think you just answered yourself. In general RF are not good in high dimensional settings or when you have more features than samples, therefore reducing your features from 400 to 8 will help, especially if you have lot's of noisy collinear features. You have also less chance to overfit in this case, but beware of double-dipping and model selection bias. So that you run lot's of models and choose the best one, which might be best just by chance and wouldn't generalize on unseen data.
+
+https://www.rpubs.com/aprasar/293450
+
