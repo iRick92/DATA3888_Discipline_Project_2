@@ -1,6 +1,10 @@
-# DATA3888_Discipline_Project_2_Shiny
+# DATA3888_Discipline_Project_2
 
-Run in R with the following code: 
+Run Shiny app in R with the following code:
 
-library(shiny)
+```
 runGitHub("DATA3888_Discipline_Project_2_Shiny", "iRick92")
+```
+
+NOTE: This may take a minute or two since it is downloading a large file (>400MB)
+
