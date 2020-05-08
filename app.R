@@ -10,6 +10,7 @@
 library(shiny)
 library(shinydashboard)
 library(shinydashboardPlus)
+
 library(shinybusy)
 library(tidyverse)
 library(ggplot2)
@@ -30,7 +31,6 @@ ui <- dashboardPage(
   dashboardSidebar(
     sidebarMenu(
       menuItem("Calculator", tabName = "calculator", icon = icon("calculator")),
-      menuItem("Data Explorer", tabName = "data_explorer", icon = icon("project-diagram")),
       menuItem("Principal Component Analysis", tabName = "pca", icon = icon("chart-area", lib = "font-awesome")),
       menuItem("Random Forest", tabName = "rf", icon = icon("project-diagram"))
     )
@@ -41,15 +41,18 @@ ui <- dashboardPage(
       tabItem(tabName = "calculator",
               fluidRow(
                 box(
-                  title = "GENE EXPRESSION DATA",
                   width = 12,
                   status = "primary",
+                  
+                  h2("Gene Expression Data"),
+                  
+                  br(),
                   
                   fluidRow(
                     valueBox("GSE107509", "MICROARRAY DATA", icon = icon("database"), color = "light-blue"),
                     valueBox(659, "SAMPLES", icon = icon("user"), color = "light-blue"),
                     valueBox(54715, "GENES", icon = icon("dna"), color = "light-blue"),
-                    valueBox("GENE EXPRESSION", "DESCRIPTION", icon = icon(""), color = "light-blue"),
+                    valueBox("GENE EXPRESSION", "DESCRIPTION", icon = icon("th"), color = "light-blue"),
                     valueBox(166, "OUTCOME: SUBCLINICAL ACUTE REJECTION", icon = icon("times"), color = "light-blue"),
                     valueBox(493, "OUTCOME: TRANSPLANT EXCELLENCE", icon = icon("check"), color = "light-blue")
                   ),
@@ -59,9 +62,12 @@ ui <- dashboardPage(
               
               fluidRow(
                 box(
-                  title = "TOP 12 GENES (BY VARIANCE)",
                   width = 12,
                   status = "primary",
+                  
+                  h2("Top 12 Genes (By Variance)"),
+                  
+                  br(),
                   
                   # Sample selector
                   h4("Select a Sample:"),
@@ -85,47 +91,28 @@ ui <- dashboardPage(
               
               fluidRow(
                 box(
-                  title = "OUTCOME",
                   width = 12,
                   status = "primary",
+                  
+                  h2("Outcome"),
+                  
+                  br(),
                   
                   valueBoxOutput("sample_outcome"),  # --------------
                 )
               )
       ), # End Calculator Tab
-      tabItem(tabName = "data_explorer",
-              
-              fluidRow(
-                box(
-                  title = "CORRELATIONS",
-                  width = 12,
-                  status = "primary",
-                  
-                  # Select Number of Correlations 
-                  sliderInput("corr_number", "Number correlations (First n/54715):",
-                              min = 0, max = 50, value = 5),
-                  
-                  plotOutput(outputId = "corrplot")
-                ),
-                
-                box(
-                  title = "BOXPLOT GENE EXPRESSION",
-                  width = 12,
-                  status = "primary",
-                  # Issue with step? It is always 2x whatever it is set to 
-                  numericInput("sample_number1", "Sample Number 1:", min = 1, max = 659, value = 1,  width = '25%'),
-                  numericInput("sample_number2", "Sample Number 2:", min = 1, max = 659, value = 2, width = '25%'),
-                  plotOutput(outputId = "gene_expression_comparison_boxplot")
-                )
-              )
-              
-      ),
+      
       tabItem(tabName = "pca",
               fluidRow(
                 box(
-                  title = "PRINCIPAL COMPONENT ANALYSIS",
                   width = 12,
                   status = "primary",
+                  
+                  h2("Principal Component Analysis"),
+                  
+                  br(),
+                  
                   
                   plotOutput("pca_variance_explained_plot"),
                   sliderInput("select_pca_number", "Number of PCA:",
@@ -135,10 +122,44 @@ ui <- dashboardPage(
                   valueBoxOutput("pca_value_box")
                 )
               )
-      ),
+      ), # End PCA tab
       
       tabItem(tabName = "rf",  
-      )
+              
+              fluidRow(
+                box(
+                  width = 12,
+                  status = "primary",
+                  
+                  h2("Random Forest Evaluation"),
+                  
+                  br(),
+                  
+                  # Value Boxes
+                  valueBox("Random Forest", "Model", icon = icon("", lib = "font-awesome"), color = "light-blue"), 
+                  valueBox(500, "Number of Trees", icon = icon("", lib = "font-awesome"), color = "light-blue"), 
+                  valueBox("Accuracy", "Metric", icon = icon("", lib = "font-awesome"), color = "light-blue"),  
+                  valueBox("Cross Validation", "Validation Technique", icon = icon("check", lib = "font-awesome"), color = "light-blue"),  
+                  valueBox(5, "Number of Folds", icon = icon("map", lib = "font-awesome"), color = "light-blue"),  
+                  valueBox(25, "Number of Repetitions", icon = icon("redo-alt", lib = "font-awesome"),color = "light-blue"), 
+                  
+                )
+              ),
+              fluidRow(
+                box(
+                  width = 12,
+                  status = "primary",
+                  
+                  h2("How Does PCA Affect Random Forest Accuracy?"),
+                  
+                  br(),
+                  
+                  selectizeInput("pca_components_input", "Select Number of Principal Components :", choices = c("5", "10", "25", "50", "75", "100", "150", "200"),  multiple = TRUE,
+                                 selected = c("5", "10"), options = list(placeholder = 'Select number of PCs to compare')),
+                  plotOutput("pca_rf_accuracy_plot")
+                )
+              )
+      ) # End RF tab
       
     )
   )
@@ -146,6 +167,11 @@ ui <- dashboardPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
+  
+  output$selected_pcas <- renderPrint({
+    input$pca_components_input
+    print(input$pca_components_input)
+  })
   
   # Gene Expression Data for 659 samples
   GSE107509 = reactive({
@@ -227,30 +253,34 @@ server <- function(input, output) {
     return(data)
   })
   
-  
-   
-  
-  
-  # Compute Principal Component Analysis
-  pca_reactive = reactive({
-    
-    progress <- shiny::Progress$new()
-    progress$set(message = "Calculating PCA", value = 0)
-    
-    pca = prcomp(GSE107509_t())
-    
-    progress$inc(1, detail = "Done")
-    
-    return(pca)
-  })
-  
-  output$pca <- renderText({
-    print("Loading Selected File")
-    return(pca_reactive())
-  })
-  
+  # Get PCA variance table
   pca_variance = reactive({
     return(read.csv("data/GSE107509_pca_variance_explained.csv"))
+  })
+  
+  # PCA explained value from selection
+  pca_explained_value = reactive({
+    value = pca_variance() %>% filter(PCA_Number == input$select_pca_number)
+    return(value$Variance_Explained[1])
+  })
+  
+  
+  # Random Forest Output
+  precomputed_random_forest_accuracies = reactive({
+    # Read in all files to make a table
+    data = as.data.frame(readr::read_csv("data/GSE107509_precomputed_rf_acc.txt"))
+    data = data %>% filter(PCA %in% input$pca_components_input)
+    
+    data$PCA = as.factor(data$PCA)
+    
+    print(str(data))
+    return(data)
+  })
+  
+  output$pca_rf_accuracy_plot = renderPlot({
+    plot = ggplot(data = precomputed_random_forest_accuracies(), aes(x = PCA, y = Accuracy, fill = PCA)) + geom_boxplot() + theme_minimal() + labs (title = "Number of Principal Components vs Random Forest Accuracy", x = "PCA", y = "Accuracy") 
+
+    return(plot)
   })
   
   output$pca_variance_explained_plot <- renderPlot({
@@ -259,10 +289,7 @@ server <- function(input, output) {
     return(plot)
   })
   
-  pca_explained_value = reactive({
-    value = pca_variance() %>% filter(PCA_Number == input$select_pca_number)
-    return(value$Variance_Explained[1])
-  })
+  
   
   output$pca_value_box <- renderValueBox({
     valueBox(
@@ -278,42 +305,6 @@ server <- function(input, output) {
     )
   })
   
-  
-  
-  output$GSE107509_Table <- DT::renderDataTable({
-    
-    return(GSE107509())
-  })
-  
-  output$top_6_var_table <- DT::renderDataTable({
-    return(top_12_var())
-  })
-  
-  output$gse_table_rejection_status <- DT::renderDataTable({
-    return(gse_rejection_status())
-  })
-  
-  
-  output$gse_table_mean <- DT::renderDataTable({
-    return(data.frame(gse_mean()))
-  })
-  
-  output$gse_table_var <- DT::renderDataTable({
-    return(data.frame(gse_var()))
-  })
-  
-  output$gse_table_mean_var <- DT::renderDataTable({
-    return(data.frame(gse_mean(), Var = gse_var()$Var))
-  })
-
-  
-  
-  
-  
-  output$contents <- DT::renderDataTable({
-    print("Loading Selected File")
-    return(uploaded_file())
-  })
   
   
   # --- Top 12 Genes:
@@ -651,38 +642,17 @@ server <- function(input, output) {
     if (outcome == "TRANSPLANT EXCELLENCE") {
       valueBox(
         outcome, "OUTCOME", icon = icon("check", lib = "font-awesome"),
-        color = "green", width = 12
+        color = "green"
       )
     }
     else {
       valueBox(
         "REJECTION", "OUTCOME", icon = icon("times", lib = "font-awesome"),
-        color = "red", width = 12
+        color = "red"
       )
     }
   })
   
-  
-  # --- 
-  
-  
-  output$corrplot = renderPlot({
-    cor_matrix<-cor(GSE107509_t()[1:input$corr_number])
-    diag(cor_matrix)<-0
-    return(corrplot(cor_matrix, method="square"))
-  })
-  
-  
-  output$gene_expression_comparison_boxplot = renderPlot({
-    
-    p <- ggplot(melt(GSE107509()[,c(input$sample_number1, input$sample_number2)]), aes(x=variable, y=value)) +  
-      geom_boxplot(outlier.colour="black", outlier.shape=16,
-                   outlier.size=0.5, notch=FALSE) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs (x = "Sample", y = "Expression Value") + theme_minimal() + coord_flip()
-    return(p)
-    
-  })
   
 }
 

@@ -138,27 +138,36 @@ MODEL
 ```{r}
 
 # Subset into number of PCA
+X_pca_5 = data.frame(GSE107509_pca_scaled$x)[,1:5]
 X_pca_10 = data.frame(GSE107509_pca_scaled$x)[,1:10]
 X_pca_25 = data.frame(GSE107509_pca_scaled$x)[,1:25]
 X_pca_50 = data.frame(GSE107509_pca_scaled$x)[,1:50]
 X_pca_75 = data.frame(GSE107509_pca_scaled$x)[,1:75]
 X_pca_100 = data.frame(GSE107509_pca_scaled$x)[,1:100]
+X_pca_150 = data.frame(GSE107509_pca_scaled$x)[,1:150]
+X_pca_200 = data.frame(GSE107509_pca_scaled$x)[,1:200]
 
 y = GSE107509_rejection_status
 
 # Keep track of random forest accuracy for each repeat
+rf_pca_5 = c()
 rf_pca_10 = c()
 rf_pca_25 = c()
 rf_pca_50 = c()
 rf_pca_75 = c()
 rf_pca_100 = c()
+rf_pca_150 = c()
+rf_pca_200 = c()
 
 # Keep track of accuracy for each fold
+rf_pca_5_acc = c()
 rf_pca_10_acc = c()
 rf_pca_25_acc = c()
 rf_pca_50_acc = c()
 rf_pca_75_acc = c()
 rf_pca_100_acc = c()
+rf_pca_150_acc = c()
+rf_pca_200_acc = c()
 
 
 cvK = 5  # number of CV folds
@@ -170,15 +179,21 @@ for (i in 1:n_sim) {
   cvSets = cvTools::cvFolds(nrow(X_pca_10), cvK)  # permute all the data, into 5 folds
   
   # Reset accuracy for each fold
+  rf_pca_5_acc = c()
   rf_pca_10_acc = c()
   rf_pca_25_acc = c()
   rf_pca_50_acc = c()
   rf_pca_75_acc = c()
   rf_pca_100_acc = c()
+  rf_pca_150_acc = c()
+  rf_pca_200_acc = c()
   
   for (j in 1:cvK) {
     # Split data into train and test
     test_id = cvSets$subsets[cvSets$which == j]
+    X_test_5 = X_pca_5[test_id, ]
+    X_train_5 = X_pca_5[-test_id, ]
+    
     X_test_10 = X_pca_10[test_id, ]
     X_train_10 = X_pca_10[-test_id, ]
     
@@ -194,11 +209,20 @@ for (i in 1:n_sim) {
     X_test_100 = X_pca_100[test_id, ]
     X_train_100 = X_pca_100[-test_id, ]
     
+    X_test_150 = X_pca_150[test_id, ]
+    X_train_150 = X_pca_150[-test_id, ]
+    
+    X_test_200 = X_pca_200[test_id, ]
+    X_train_200 = X_pca_200[-test_id, ]
+    
     
     y_test = y[test_id,]
     y_train = y[-test_id,]
 
     ## Perform Random Forest
+    rf_res_5 <- randomForest::randomForest(x = X_train_5, y = as.factor(y_train))
+    fit_5 <- predict(rf_res_5, X_test_5)
+    
     rf_res_10 <- randomForest::randomForest(x = X_train_10, y = as.factor(y_train))
     fit_10 <- predict(rf_res_10, X_test_10)
     
@@ -214,34 +238,55 @@ for (i in 1:n_sim) {
     rf_res_100 <- randomForest::randomForest(x = X_train_100, y = as.factor(y_train))
     fit_100 <- predict(rf_res_100, X_test_100)
     
+    rf_res_150 <- randomForest::randomForest(x = X_train_150, y = as.factor(y_train))
+    fit_150 <- predict(rf_res_150, X_test_150)
+    
+    rf_res_200 <- randomForest::randomForest(x = X_train_200, y = as.factor(y_train))
+    fit_200 <- predict(rf_res_200, X_test_200)
+    
     # Get accuracy and store
+    rf_pca_5_acc[j] = table(fit_5, y_test) %>% diag %>% sum %>% `/`(length(y_test))
     rf_pca_10_acc[j] = table(fit_10, y_test) %>% diag %>% sum %>% `/`(length(y_test))
     rf_pca_25_acc[j] = table(fit_25, y_test) %>% diag %>% sum %>% `/`(length(y_test))
     rf_pca_50_acc[j] = table(fit_50, y_test) %>% diag %>% sum %>% `/`(length(y_test))
     rf_pca_75_acc[j] = table(fit_75, y_test) %>% diag %>% sum %>% `/`(length(y_test))
     rf_pca_100_acc[j] = table(fit_100, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    rf_pca_150_acc[j] = table(fit_150, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    rf_pca_200_acc[j] = table(fit_200, y_test) %>% diag %>% sum %>% `/`(length(y_test))
     }
   
   # Store mean accuracy for each repeat
+  rf_pca_5 <- append(rf_pca_5, mean(rf_pca_5_acc))
   rf_pca_10 <- append(rf_pca_10, mean(rf_pca_10_acc))
   rf_pca_25 <- append(rf_pca_25, mean(rf_pca_25_acc))
   rf_pca_50 <- append(rf_pca_50, mean(rf_pca_50_acc))
   rf_pca_75 <- append(rf_pca_75, mean(rf_pca_75_acc))
   rf_pca_100 <- append(rf_pca_100, mean(rf_pca_100_acc))
+  rf_pca_150 <- append(rf_pca_150, mean(rf_pca_150_acc))
+  rf_pca_200 <- append(rf_pca_200, mean(rf_pca_200_acc))
 } ## end for
 
 # Display boxplot
-boxplot(list("10" = rf_pca_10, "25" = rf_pca_25, "50" = rf_pca_50, "75" = rf_pca_75, "100" = rf_pca_100))
+boxplot(list("5" = rf_pca_5, "10" = rf_pca_10, "25" = rf_pca_25, "50" = rf_pca_50, "75" = rf_pca_75, "100" = rf_pca_100, "150" = rf_pca_150, "200" = rf_pca_200))
 
-data = rbind(data.frame(PCA = rep("10", n_sim), Accuracy = rf_pca_10), 
+data = rbind(data.frame(PCA = rep("5", n_sim), Accuracy = rf_pca_5),
+             data.frame(PCA = rep("10", n_sim), Accuracy = rf_pca_10), 
              data.frame(PCA = rep("25", n_sim), Accuracy = rf_pca_25), 
              data.frame(PCA = rep("50", n_sim), Accuracy = rf_pca_50), 
              data.frame(PCA = rep("75", n_sim), Accuracy = rf_pca_75), 
-             data.frame(PCA = rep("100", n_sim), Accuracy = rf_pca_100))
+             data.frame(PCA = rep("100", n_sim), Accuracy = rf_pca_100),
+             data.frame(PCA = rep("150", n_sim), Accuracy = rf_pca_150),
+             data.frame(PCA = rep("200", n_sim), Accuracy = rf_pca_200))
 
 ggplot(data = data, aes(x = PCA, y = Accuracy)) + geom_boxplot() + theme_minimal() + labs (x = "PCA", y = "Accuracy") 
 
 # Save results of "data" so we can show it in the app
+```
+
+```{r}
+
+ggplot(data = data %>% filter(PCA %in% c("10", "25", "100", "50")), aes(x = PCA, y = Accuracy, fill = PCA)) + geom_boxplot() + theme_minimal() + labs (x = "PCA", y = "Accuracy") 
+
 ```
 
 ```{r}
