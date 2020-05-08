@@ -19,11 +19,11 @@ clinical_outcome_GSE107509 <- getGEO("GSE107509")
 
 clinical_outcome_GSE107509_results <- clinical_outcome_GSE107509$GSE107509_series_matrix.txt.gz$characteristics_ch1
 
-rejection_status_GSE107509 <- unlist(lapply( strsplit(as.character(clinical_outcome_GSE107509_results), ": " ) , `[[` , 2)  )
+GSE107509_rejection_status <- unlist(lapply( strsplit(as.character(clinical_outcome_GSE107509_results), ": " ) , `[[` , 2)  )
 
-rejection_status_GSE107509 = toupper(rejection_status_GSE107509)
+GSE107509_rejection_status = toupper(GSE107509_rejection_status)
 
-rejection_table = table(rejection_status_GSE107509)  # WILL NEED TO COMBINE THESE: "subclinical acute rejection" "subclinical Acute Rejection" since they are the same
+rejection_table = table(GSE107509_rejection_status)  # WILL NEED TO COMBINE THESE: "subclinical acute rejection" "subclinical Acute Rejection" since they are the same
 
 print(names(rejection_table)[[1]])
 print(as.vector(rejection_table[1]))
@@ -37,7 +37,7 @@ print(as.vector(rejection_table[1]))
 
 #write.csv(data.frame(rejection_status_GSE107509), "data/rejection_status_GSE107509.txt", row.names=FALSE)
 
-rejection_status_GSE107509 = read.csv("data/rejection_status_GSE107509.txt")
+GSE107509_rejection_status = read.csv("data/rejection_status_GSE107509.txt")
 
 ```
 
@@ -127,11 +127,227 @@ ggplot(data = pca_top_30_df, aes(x = Principal_Component, y = Variability)) + ge
 
 ```
 
+```{r}
+
+GSE107509_pca <- prcomp(t(GSE107509))
+GSE107509_pca_scaled <- prcomp(t(GSE107509), scale. = TRUE)
+
+```
+
 MODEL
 ```{r}
 
-X = as.matrix(gse_pca$x[,1:30])
-y = rejection_status_GSE107509
+# Subset into number of PCA
+X_pca_10 = data.frame(GSE107509_pca_scaled$x)[,1:10]
+X_pca_25 = data.frame(GSE107509_pca_scaled$x)[,1:25]
+X_pca_50 = data.frame(GSE107509_pca_scaled$x)[,1:50]
+X_pca_75 = data.frame(GSE107509_pca_scaled$x)[,1:75]
+X_pca_100 = data.frame(GSE107509_pca_scaled$x)[,1:100]
+
+y = GSE107509_rejection_status
+
+# Keep track of random forest accuracy for each repeat
+rf_pca_10 = c()
+rf_pca_25 = c()
+rf_pca_50 = c()
+rf_pca_75 = c()
+rf_pca_100 = c()
+
+# Keep track of accuracy for each fold
+rf_pca_10_acc = c()
+rf_pca_25_acc = c()
+rf_pca_50_acc = c()
+rf_pca_75_acc = c()
+rf_pca_100_acc = c()
+
+
+cvK = 5  # number of CV folds
+n_sim = 25 ## number of repeats
+
+for (i in 1:n_sim) {
+  print(i)
+
+  cvSets = cvTools::cvFolds(nrow(X_pca_10), cvK)  # permute all the data, into 5 folds
+  
+  # Reset accuracy for each fold
+  rf_pca_10_acc = c()
+  rf_pca_25_acc = c()
+  rf_pca_50_acc = c()
+  rf_pca_75_acc = c()
+  rf_pca_100_acc = c()
+  
+  for (j in 1:cvK) {
+    # Split data into train and test
+    test_id = cvSets$subsets[cvSets$which == j]
+    X_test_10 = X_pca_10[test_id, ]
+    X_train_10 = X_pca_10[-test_id, ]
+    
+    X_test_25 = X_pca_25[test_id, ]
+    X_train_25 = X_pca_25[-test_id, ]
+    
+    X_test_50 = X_pca_50[test_id, ]
+    X_train_50 = X_pca_50[-test_id, ]
+    
+    X_test_75 = X_pca_75[test_id, ]
+    X_train_75 = X_pca_75[-test_id, ]
+    
+    X_test_100 = X_pca_100[test_id, ]
+    X_train_100 = X_pca_100[-test_id, ]
+    
+    
+    y_test = y[test_id,]
+    y_train = y[-test_id,]
+
+    ## Perform Random Forest
+    rf_res_10 <- randomForest::randomForest(x = X_train_10, y = as.factor(y_train))
+    fit_10 <- predict(rf_res_10, X_test_10)
+    
+    rf_res_25 <- randomForest::randomForest(x = X_train_25, y = as.factor(y_train))
+    fit_25 <- predict(rf_res_25, X_test_25)
+    
+    rf_res_50 <- randomForest::randomForest(x = X_train_50, y = as.factor(y_train))
+    fit_50 <- predict(rf_res_50, X_test_50)
+    
+    rf_res_75 <- randomForest::randomForest(x = X_train_75, y = as.factor(y_train))
+    fit_75 <- predict(rf_res_75, X_test_75)
+    
+    rf_res_100 <- randomForest::randomForest(x = X_train_100, y = as.factor(y_train))
+    fit_100 <- predict(rf_res_100, X_test_100)
+    
+    # Get accuracy and store
+    rf_pca_10_acc[j] = table(fit_10, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    rf_pca_25_acc[j] = table(fit_25, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    rf_pca_50_acc[j] = table(fit_50, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    rf_pca_75_acc[j] = table(fit_75, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    rf_pca_100_acc[j] = table(fit_100, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    }
+  
+  # Store mean accuracy for each repeat
+  rf_pca_10 <- append(rf_pca_10, mean(rf_pca_10_acc))
+  rf_pca_25 <- append(rf_pca_25, mean(rf_pca_25_acc))
+  rf_pca_50 <- append(rf_pca_50, mean(rf_pca_50_acc))
+  rf_pca_75 <- append(rf_pca_75, mean(rf_pca_75_acc))
+  rf_pca_100 <- append(rf_pca_100, mean(rf_pca_100_acc))
+} ## end for
+
+# Display boxplot
+boxplot(list("10" = rf_pca_10, "25" = rf_pca_25, "50" = rf_pca_50, "75" = rf_pca_75, "100" = rf_pca_100))
+
+data = rbind(data.frame(PCA = rep("10", n_sim), Accuracy = rf_pca_10), 
+             data.frame(PCA = rep("25", n_sim), Accuracy = rf_pca_25), 
+             data.frame(PCA = rep("50", n_sim), Accuracy = rf_pca_50), 
+             data.frame(PCA = rep("75", n_sim), Accuracy = rf_pca_75), 
+             data.frame(PCA = rep("100", n_sim), Accuracy = rf_pca_100))
+
+ggplot(data = data, aes(x = PCA, y = Accuracy)) + geom_boxplot() + theme_minimal() + labs (x = "PCA", y = "Accuracy") 
+
+# Save results of "data" so we can show it in the app
+```
+
+```{r}
+
+rf_res
+
+```
+
+
+```{r}
+
+train.data<-as.matrix(class = GSE107509_rejection_status, pca$x)
+train.data <- train.data[,1:30]
+metric <- "Accuracy"
+control <- trainControl(method="repeatedcv", number=5, repeats=25)
+mtry <- sqrt(ncol(train.data))
+tunegrid <- expand.grid(.mtry=mtry)
+library(doMC)
+
+registerDoMC(cores = 4)
+model_rf <- train(class ~ .,data=train.data, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
+
+```
+
+
+```{r}
+
+X_iris_2 = as.matrix(prcomp(iris[-5])$x[,1:2])
+X_iris_3 = as.matrix(prcomp(iris[-5])$x[,1:3])
+X_iris_4 = as.matrix(prcomp(iris[-5])$x[,1:4])
+X_iris_normal = iris[-5]
+y_iris = iris[5]
+
+cvK = 5  # number of CV folds
+iris_cv2 = c()
+iris_cv3 = c()
+iris_cv4 = c()
+iris_cv_normal = c()
+
+cv_acc_2 = c()
+cv_acc_3 = c()
+cv_acc_4 = c()
+cv_acc_normal = c()
+
+n_sim = 50 ## number of repeats
+for (i in 1:n_sim) {
+
+  cvSets = cvTools::cvFolds(nrow(X_iris_2), cvK)  # permute all the data, into 5 folds
+  cv_acc_2 = c()
+  cv_acc_3 = c()
+  cv_acc_4 = c()
+  iris_acc_normal = c()
+  
+  for (j in 1:cvK) {
+    test_id = cvSets$subsets[cvSets$which == j]
+    
+    X_test_2 = X_iris_2[test_id, ]
+    X_train_2 = X_iris_2[-test_id, ]
+    
+    X_test_3 = X_iris_3[test_id, ]
+    X_train_3 = X_iris_3[-test_id, ]
+    
+    X_test_4 = X_iris_4[test_id, ]
+    X_train_4 = X_iris_4[-test_id, ]
+    
+    X_test_normal = X_iris_normal[test_id, ]
+    X_train_normal = X_iris_normal[-test_id, ]
+    
+    y_test = y_iris[test_id,]
+    y_train = y_iris[-test_id,]
+
+    ## RandomForest
+    rf_res_2 <- randomForest::randomForest(x = X_train_2, y = as.factor(y_train))
+    fit2 <- predict(rf_res_2, X_test_2)
+    
+    rf_res_3 <- randomForest::randomForest(x = X_train_3, y = as.factor(y_train))
+    fit3 <- predict(rf_res_3, X_test_3)
+    
+    rf_res_4 <- randomForest::randomForest(x = X_train_4, y = as.factor(y_train))
+    fit4 <- predict(rf_res_4, X_test_4)
+    
+    rf_res_normal <- randomForest::randomForest(x = X_train_normal, y = as.factor(y_train))
+    fit_normal <- predict(rf_res_normal, X_test_normal)
+    
+    cv_acc_2[j] = table(fit2, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    cv_acc_3[j] = table(fit3, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    cv_acc_4[j] = table(fit4, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+    cv_acc_normal[j] = table(fit_normal, y_test) %>% diag %>% sum %>% `/`(length(y_test))
+  }
+  iris_cv2 <- append(iris_cv2, mean(cv_acc_2))
+  iris_cv3 <- append(iris_cv3, mean(cv_acc_3))
+  iris_cv4 <- append(iris_cv4, mean(cv_acc_4))
+  iris_cv_normal <- append(iris_cv_normal, mean(cv_acc_normal))
+} ## end for
+
+boxplot(list(iris_2 = iris_cv2, iris_3 = iris_cv3, iris_4 = iris_cv4, iris_normal = iris_cv_normal)) 
+```
+
+
+```{r}
+
+largevar = apply(GSE107509, 1, var)
+ind = which(largevar > quantile(largevar, 0.9))
+
+X = as.matrix(t(GSE107509[ind,]))
+y = GSE107509_rejection_status
 
 cvK = 5  # number of CV folds
 cv_50acc5_knn = cv_50acc5_svm = cv_50acc5_rf = c()
@@ -147,8 +363,8 @@ for (i in 1:n_sim) {
     test_id = cvSets$subsets[cvSets$which == j]
     X_test = X[test_id, ]
     X_train = X[-test_id, ]
-    y_test = y[test_id]
-    y_train = y[-test_id]
+    y_test = y[test_id,]
+    y_train = y[-test_id,]
     
     ## KNN
     fit5 = class::knn(train = X_train, test = X_test, cl = y_train, k = 5)
@@ -169,24 +385,30 @@ for (i in 1:n_sim) {
   cv_50acc5_rf <- append(cv_50acc5_rf, mean(cv_acc_rf))
 } ## end for
 
+
 boxplot(list(SVM = cv_50acc5_svm, KNN = cv_50acc5_knn , RF= cv_50acc5_rf ))
+
 
 ```
 Apply to test
 ```{r}
 
-test_index = 1
+test_index = c(seq(650,659))
 
-test_outcome = rejection_status_GSE107509[test_index]
-test_data = gse_t[test_index,]
+test_outcome = GSE107509_rejection_status[test_index,]
+test_data = GSE107509_t[test_index,]
 
 print(test_outcome)
 
-test.data<-predict(gse_pca, newdata = test_data)
+test.data<-predict(pca, newdata = test_data)
 test.data <- as.data.frame(test.data)
-test.data <- test.data[,1:30]
+test.data <- test.data[,1:100]
 pred_test <- predict(rf_res, test.data)
 pred_test
+
+confusionMatrix(pred_test, test_outcome)
+
+
 ```
 
 
