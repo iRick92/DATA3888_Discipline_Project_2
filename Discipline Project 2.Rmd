@@ -2,6 +2,7 @@
 title: "Discipline Project 2"
 author: Ricky Cai (440242475)
 geometry: margin=2cm
+urlcolor: blue
 output:
   pdf_document:
     pandoc_args: [
@@ -17,7 +18,7 @@ output:
 
 # Topic
 
-As the technology for sequencing genes becomes more readily available, more powerful and cheaper, the information about genes that is captured becomes more detailed. This becomes a problem when using machine learning techniques to analyse the high dimensional data. This problem is known as the "big p, little n" problem where n refers to the subjects and p refers to the number of measurements. Consequences of high dimension data include multiple hypothesis testing and high computation time. In this report, we analyse the GSE107509 gene expression data set that contains 659 samples and over 54,000 genes. This data set was chosen since due tot he high number of samples leading to a higher diversity of samples.
+As the technology for sequencing genes becomes more readily available, more powerful and cheaper, the information about genes that is captured becomes more detailed. This becomes a problem when using machine learning techniques to analyse the high dimensional data. This problem is known as the "big p, little n" problem where p refers to the number of measurements and n refers to the subjects. Consequences of high dimension data include multiple hypothesis testing and high computation time. In this report, we analyse the GSE107509 gene expression data set that contains 659 samples and over 54,000 genes. This data set was chosen since due tot he high number of samples leading to a higher diversity of samples.
 
 Dimension reduction techniques such as Principal Component Analysis (PCA) is a way to transform the high dimension data into low dimension data while attempting to preserve the original information as much as possible. PCA is used to help alleviate the problems associated with "big p, little n".
 
@@ -32,7 +33,7 @@ The approach to answering the question uses Principal Component Analysis to redu
 
 A shortcoming to the data analytics was the size of the data which had an effect on how the data was stored on Github (There is a 100MB limit on Github). To host the Shiny application on Github, the gene expression data was split into several parts and recombined in the Shiny app when it is run. 
 
-Another shortcoming was the computation time for running PCA and Random Forest models. To address this issue, the data was preprocessed and saved. The data used in the Shiny app uses preprocessed data to reduce the time it takes to run models. This does not let the user have full control over the parameters but a selection of preprocessed values is provided for comparison.
+Another shortcoming was the computation time for running PCA and Random Forest. To address this issue, the data was preprocessed and saved. Some of the data used in the Shiny app uses preprocessed data to reduce the time it takes to run models. This does prevents the user in having full control over the parameters but a selection of preprocessed values is provided for comparison.
 
 
 # Graphics
@@ -47,16 +48,19 @@ The first section makes use of colour to visualise the top 12 genes (measured by
 
 The second section makes use of a screeplot of the PCA to show the cululative variance explained by the number of Principal Components selected (Fig. 2). The user can specify the number of Principal Components by a slider which dynamically shows the percentage of variance explained by the specified number of Principal Components.
 
-![Screeplot of PCA](images/Fig2.png)
+![Cumulative screeplot of PCA](images/Fig2.png)
 
 The third section makes use of boxplots to show how the number of Principal Components affects the accuracy of a Random Forest model (Fig. 3). The user can compare between 5, 10 25, 50, 75, 100, 150 and 200 components using a selection box which dynamically updates the boxplots.
 
 ![Boxplots showing effect of principal components on accuracy](images/Fig3.png)
 
 The Github link to the Shiny App is provided below: 
-https://github.com/iRick92/DATA3888_Discipline_Project_2
 
-The Shiny App can be accessed through the running the following line of code in R:
+[Github Link](https://github.com/iRick92/DATA3888_Discipline_Project_2)
+
+
+
+The Shiny App can be accessed by the running the following line of code in R:
 
 ```{r, eval = F}
 
