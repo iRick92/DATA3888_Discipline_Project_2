@@ -284,7 +284,7 @@ server <- function(input, output) {
   })
   
   output$pca_variance_explained_plot <- renderPlot({
-    plot = ggplot(data = pca_variance(), aes(x = PCA_Number, y = Variance_Explained)) + geom_line() + theme_minimal() + geom_vline(xintercept=input$select_pca_number, color='coral', size=2) + 
+    plot = ggplot(data = pca_variance(), aes(x = PCA_Number, y = Variance_Explained)) + geom_line() + theme_minimal() + geom_vline(xintercept=input$select_pca_number, color='coral') + 
       labs(title = "Cumulative Sum of Variance Explained for PCA", x = "Number of Principal Components", y = "Variance Explained (%)")
     return(plot)
   })
